@@ -63,7 +63,7 @@ export async function getAiDecision(
       const text = response.text || "";
       if (!text) throw new Error("Empty AI response");
       
-      const parsed = JSON.parse(text) as ActionPayload;
+      const parsed = JSON.parse(text as string) as ActionPayload;
       
       // dynamic validation against legalActions
       if (!legalActions.includes(parsed.type)) {
