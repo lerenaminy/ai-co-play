@@ -1,82 +1,63 @@
 // src/agent/gemini.ts
-import { GoogleGenAI } from '@google/genai';
-import { GameState, ActionPayload, AutonomyLevel } from '../types';
+import { GameState } from '../types';
 
-function buildPrompt(
-  gameId: string, 
-  legalActions: string[], 
-  state: GameState, 
-  autonomy: AutonomyLevel, 
-  retryError?: string
-): string {
-  let prompt = `
-  Role: AI player in a game called [${gameId}].
-  Autonomy Level: ${autonomy} (0=Observer, 1=Advisor, 2=Executor, 3=Teammate, 4=Leader).
-  Current State: ${JSON.stringify(state)}
-  
-  Your goal: Win the game or cooperate based on the game type.
-  Legal Actions: ${JSON.stringify(legalActions)}.
-  Output valid JSON ONLY.
-  `;
-
-  if (retryError) {
-    prompt += `\nWARNING: Previous response failed. Error: ${retryError}. Correct it.`;
-  }
-
-  return prompt;
+export interface ActionPayload {
+  type: string;
+  explanation: string;
 }
 
-export async function getAiDecision(
-  gameId: string,
+export async function getGeminiAction(
+  state: GameState,
   legalActions: string[],
-  state: GameState, 
-  autonomy: AutonomyLevel, 
-  apiKey: string, 
-  maxRetries = 2
+  apiKey: string
 ): Promise<ActionPayload> {
-  
-  if (!apiKey) throw new Error('API Key missing');
-  const ai = new GoogleGenAI({ apiKey });
-  let lastError = '';
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const prompt = buildPrompt(gameId, legalActions, state, autonomy, attempt > 0 ? lastError : undefined);
-      
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'OBJECT',
-            properties: {
-              type: { type: 'STRING' }, // dynamic type
-              confidence: { type: 'NUMBER' },
-              explanation: { type: 'STRING' }
-            },
-            required: ['type', 'explanation']
-          }
-        }
-      });
-
-      const text = response.text || "";
-      if (!text) throw new Error("Empty AI response");
-      
-      const parsed = JSON.parse(text as string) as ActionPayload;
-      
-      // dynamic validation against legalActions
-      if (!legalActions.includes(parsed.type)) {
-        throw new Error(`Invalid action: ${parsed.type}. Must be one of ${legalActions.join(',')}`);
-      }
-
-      return parsed;
-
-    } catch (error: any) {
-      lastError = error.message;
-      console.warn(`[Attempt ${attempt + 1}] failed: ${lastError}`);
+  // step 1: set up prompt
+  const prompt = `
+    Analyze the current game state and make a strategic move.
+    State: ${JSON.stringify(state)}
+    Legal Actions: ${legalActions.join(', ')}
+    
+    You MUST return ONLY a raw JSON object. Do not include markdown formatting or backticks.
+    Format:
+    {
+      "type": "ONE_OF_THE_LEGAL_ACTIONS",
+      "explanation": "Short strategic reason"
     }
+  `;
+
+  // step 2: call api with latest model
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.7 }
+    })
+  });
+
+  if (!res.ok) {
+    const errorDetail = await res.text();
+    console.error("api error details:", errorDetail);
+    throw new Error(`api failed with status ${res.status}`);
   }
 
-  return { type: legalActions[0], confidence: 0, explanation: 'Fallback to first legal action.' };
+  const data = await res.json();
+  let text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+  // step 3: clean text
+  text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+  if (!text) {
+    throw new Error("empty response");
+  }
+
+  // step 4: parse output
+  const parsed = JSON.parse(text) as ActionPayload;
+  
+  if (!legalActions.includes(parsed.type)) {
+    parsed.type = legalActions[0];
+    parsed.explanation = "fallback move";
+  }
+
+  return parsed;
 }

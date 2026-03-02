@@ -1,53 +1,47 @@
 // app/api/turn/route.ts
 import { NextResponse } from 'next/server';
-import { getAiDecision } from '../../../src/agent/gemini';
+import { getGeminiAction } from '../../../src/agent/gemini';
 import { GAME_REGISTRY } from '../../../src/game/registry';
-import { GameState, ActionType, AutonomyLevel, TraceRecord } from '../../../src/types';
+import { GameState, TraceRecord, AutonomyLevel } from '../../../src/types';
 
 export async function POST(req: Request) {
   try {
+    // step 1: parse request
     const body = await req.json();
-    const { gameId, state, humanAction, autonomy, apiKey } = body as {
-      gameId: string; // receive gameId
-      state: GameState;
-      humanAction: ActionType;
-      autonomy: AutonomyLevel;
-      apiKey: string;
-    };
+    const { gameId, state, humanAction, autonomy, apiKey } = body;
 
     const gameMeta = GAME_REGISTRY[gameId];
-    if (!gameMeta) return NextResponse.json({ error: 'Game not found' }, { status: 404 });
+    const adapter = gameMeta?.adapter;
 
-    const adapter = gameMeta.adapter;
-    const legalActions = adapter.listLegalActions(state);
-
-    let aiDecision = { type: legalActions[0], explanation: 'Observer Mode.', confidence: 1 };
-
-    if (autonomy > 0) {
-      if (!apiKey) return NextResponse.json({ error: 'API Key required' }, { status: 401 });
-      // pass gameId and legalActions to agent
-      const decision = await getAiDecision(gameId, legalActions, state, autonomy, apiKey);
-      aiDecision = decision as any;
+    if (!adapter) {
+      return NextResponse.json({ error: 'engine not found' }, { status: 400 });
     }
 
-    // apply logic using specific adapter
-    const newState = adapter.applyRound(state, humanAction, aiDecision.type as ActionType);
+    // step 2: get legal actions
+    const legalActions = adapter.listLegalActions(state);
+    
+    // step 3: get ai action
+    const aiPayload = await getGeminiAction(state, legalActions, apiKey);
 
+    // step 4: apply actions
+    const newState = adapter.applyRound(state, humanAction, aiPayload.type);
+
+    // step 5: log trace
     const trace: TraceRecord = {
-      traceId: crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
+      traceId: Date.now().toString(),
+      timestamp: Date.now().toString(),
       actor: 'ai',
-      autonomyLevel: autonomy,
+      autonomyLevel: autonomy as AutonomyLevel,
       stateSummary: state,
-      legalActions: legalActions as ActionType[],
-      modelOutput: aiDecision,
-      isValidated: true,
+      legalActions: legalActions,
+      modelOutput: aiPayload,
+      isValidated: legalActions.includes(aiPayload.type)
     };
 
     return NextResponse.json({ newState, trace });
 
-  } catch (error) {
-    console.error('API Error:', error);
-    return NextResponse.json({ error: 'Turn failed' }, { status: 500 });
+  } catch (error: any) {
+    console.error("api error:", error);
+    return NextResponse.json({ error: error.message || 'turn failed' }, { status: 500 });
   }
 }

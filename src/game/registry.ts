@@ -2,6 +2,8 @@
 import { GameAdapter } from '../types';
 import { shareOrStealAdapter } from './adapter';
 import { overcookedAdapter } from './overcookedAdapter';
+import { monopolyAdapter } from './monopolyAdapter';
+import { liarsDiceAdapter } from './liarsDiceAdapter';
 
 export interface GameMetadata {
   id: string;
@@ -31,13 +33,13 @@ export const GAME_REGISTRY: Record<string, GameMetadata> = {
     name: 'Monopoly Lite',
     description: 'Strategic resource management and investment. AI as a rival.',
     type: 'Strategy',
-    adapter: shareOrStealAdapter // Placeholder until we build the engine
+    adapter: monopolyAdapter
   },
   'deduction-game': {
     id: 'deduction-game',
     name: 'Liar Dice Lite',
     description: 'Hidden information and social reasoning. Can you spot the bluff?',
     type: 'Hidden Info',
-    adapter: shareOrStealAdapter // Placeholder until we build the engine
+    adapter: liarsDiceAdapter
   }
 };

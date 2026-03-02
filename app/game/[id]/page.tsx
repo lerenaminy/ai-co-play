@@ -42,6 +42,14 @@ export default function GameRoom() {
         body: JSON.stringify({ gameId: id, state, humanAction: action, autonomy, apiKey })
       });
       const data = await res.json();
+      
+      // Safety net: check if API returned an error
+      if (data.error) {
+        alert("Agent Error: " + data.error);
+        setLoading(false);
+        return;
+      }
+
       if (autonomy >= 3 || autonomy === 0) {
         if (data.newState) setState(data.newState);
         if (data.trace) setTraces((prev) => [data.trace, ...prev]);
@@ -49,7 +57,8 @@ export default function GameRoom() {
         setPendingResult({ newState: data.newState, trace: data.trace });
       }
     } catch (err) {
-      console.error(err);
+      console.error("Network error:", err);
+      alert("Failed to communicate with Agent.");
     } finally {
       setLoading(false);
     }
@@ -57,11 +66,12 @@ export default function GameRoom() {
 
   const handleApprove = () => {
     setState(pendingResult.newState);
-    setTraces((prev) => [pendingResult.trace, ...prev]);
+    if (pendingResult.trace) {
+      setTraces((prev) => [pendingResult.trace, ...prev]);
+    }
     setPendingResult(null);
   };
 
-  // Expanded Rule Book Component
   const RuleBook = () => (
     <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-fit">
       <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
@@ -81,7 +91,47 @@ export default function GameRoom() {
               </ul>
             </div>
             <p className="font-bold text-green-600">SCORING: +10 Points per Serve.</p>
-            <p className="text-xs italic bg-gray-50 p-2 rounded-lg">Pro-tip: If you chop the tomato, the AI will observe your action and likely prepare the lettuce for you!</p>
+          </div>
+        ) : id === 'monopoly-lite' ? (
+          <div className="space-y-4">
+            <p className="font-bold text-green-600">MISSION: FINANCIAL DOMINANCE</p>
+            <p>Manage your cash and buy properties to outscore the AI rival.</p>
+            <div className="p-3 bg-green-50 rounded-xl border border-green-100">
+              <p className="font-bold text-green-800 text-xs mb-2">ACTIONS:</p>
+              <ul className="list-disc ml-4 space-y-1">
+                <li><strong>BUY_LAND:</strong> Costs $300. Adds 1 Property.</li>
+                <li><strong>SAVE_CASH:</strong> Earns $100 interest.</li>
+              </ul>
+            </div>
+            <p className="font-bold text-gray-800 text-xs">Score = Cash + (Properties * $500)</p>
+          </div>
+        ) : id === 'deduction-game' ? (
+          <div className="space-y-4">
+            <p className="font-bold text-purple-600">MISSION: CATCH THE BLUFF</p>
+            <p>Each player has 3 secret dice. Use math and intuition to spot the AI's lie—or convince the AI that your bid is real!</p>
+            <div className="p-3 bg-purple-50 rounded-xl border border-purple-100">
+              <p className="font-bold text-purple-800 text-xs mb-2">GAME FLOW:</p>
+              <ul className="list-disc ml-4 space-y-1 text-xs">
+                <li><strong>Each Round:</strong> You and AI each roll 3 hidden dice (1-6).</li>
+                <li><strong>Bidding:</strong> Take turns raising bids (e.g., "Three 4s").</li>
+                <li><strong>Higher Bids:</strong> More quantity OR higher dice face required.</li>
+                <li><strong>Challenge:</strong> Call "Liar!" to reveal all dice.</li>
+              </ul>
+            </div>
+            <div className="p-3 bg-purple-50 rounded-xl border border-purple-100">
+              <p className="font-bold text-purple-800 text-xs mb-2">ACTIONS:</p>
+              <ul className="list-disc ml-4 space-y-1 text-xs">
+                <li><strong>BID_qty_face:</strong> Bid (e.g., BID_3_4 = "Three 4s").</li>
+                <li><strong>CHALLENGE:</strong> Call the last bid a bluff.</li>
+              </ul>
+            </div>
+            <div className="p-3 bg-purple-50 rounded-xl border border-purple-100">
+              <p className="font-bold text-purple-800 text-xs mb-2">WINNING:</p>
+              <ul className="list-disc ml-4 space-y-1 text-xs">
+                <li><strong>Bid is TRUE:</strong> Bidder +1 pt.</li>
+                <li><strong>Bid is FALSE:</strong> Challenger +1 pt.</li>
+              </ul>
+            </div>
           </div>
         ) : (
           <div className="space-y-4">
@@ -93,7 +143,6 @@ export default function GameRoom() {
               <p>• You <strong>STEAL</strong> / AI Shares: You get +5, AI gets 0.</p>
               <p>• Both <strong>STEAL</strong>: Both get +1 pt.</p>
             </div>
-            <p className="font-bold text-gray-800">GOAL: Maximize your personal score.</p>
           </div>
         )}
       </div>
@@ -107,15 +156,12 @@ export default function GameRoom() {
     <main className="min-h-screen p-6 md:p-10 bg-gray-50 text-gray-900 font-sans">
       <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-8">
         
-        {/* Left: Expanded Rule Book */}
         <div className="lg:col-span-1">
           <RuleBook />
         </div>
 
-        {/* Right: Game UI */}
         <div className="lg:col-span-3 space-y-6">
           
-          {/* Header & Progress */}
           <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center">
             <h1 className="text-3xl font-bold mb-2">{gameMeta.name}</h1>
             <p className="text-sm font-bold text-gray-400 mb-6">Environment Progress: {state.currentRound} / {state.maxRounds}</p>
@@ -131,7 +177,21 @@ export default function GameRoom() {
             </div>
           </div>
 
-          {/* Visualization: Kitchen Status */}
+          {id === 'monopoly-lite' && (
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 grid grid-cols-2 gap-6">
+              <div className="p-6 rounded-2xl border-2 border-gray-100 bg-gray-50 text-center">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Your Assets</p>
+                <p className="text-4xl font-bold text-green-500 mb-2">${state.cash?.human || 0}</p>
+                <p className="text-sm font-bold text-gray-600">🏠 {state.properties?.human || 0} Properties</p>
+              </div>
+              <div className="p-6 rounded-2xl border-2 border-gray-100 bg-gray-50 text-center">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">AI Assets</p>
+                <p className="text-4xl font-bold text-red-500 mb-2">${state.cash?.ai || 0}</p>
+                <p className="text-sm font-bold text-gray-600">🏠 {state.properties?.ai || 0} Properties</p>
+              </div>
+            </div>
+          )}
+
           {id === 'overcooked-lite' && (
             <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
               <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-6 text-center">Kitchen Status</h3>
@@ -148,7 +208,64 @@ export default function GameRoom() {
             </div>
           )}
 
-          {/* Controls */}
+          {id === 'deduction-game' && (
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-6 text-center">Your Dice & Current Bid</h3>
+              <div className="space-y-6">
+                <div>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Your Hidden Dice</p>
+                  <div className="flex justify-center gap-4">
+                    {state.humanDice?.map((die: number, idx: number) => (
+                      <div key={idx} className="w-16 h-16 bg-purple-100 border-2 border-purple-400 rounded-lg flex items-center justify-center">
+                        <span className="text-3xl font-bold text-purple-600">{die}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {state.currentBid && (
+                  <div className="p-4 rounded-xl border-2 border-yellow-300 bg-yellow-50">
+                    <p className="text-xs font-bold text-yellow-700 mb-1">Current Bid ({state.currentBid.biddingPlayer === 'human' ? '👤 You' : '🤖 AI'}):</p>
+                    <p className="text-2xl font-bold text-yellow-800">{state.currentBid.quantity} × {state.currentBid.faceValue}s</p>
+                  </div>
+                )}
+                {state.gamePhase === 'reveal' && state.revealedDice && (
+                  <div className="p-4 rounded-xl border-2 border-purple-300 bg-purple-50">
+                    <p className="text-xs font-bold text-purple-700 mb-3">🎲 Revealed Dice</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs font-bold text-gray-600 mb-2">Your Dice:</p>
+                        <div className="flex gap-2">
+                          {state.revealedDice.human.map((die: number, idx: number) => (
+                            <div key={idx} className="w-12 h-12 bg-blue-100 border border-blue-300 rounded flex items-center justify-center">
+                              <span className="font-bold text-blue-600">{die}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-gray-600 mb-2">AI Dice:</p>
+                        <div className="flex gap-2">
+                          {state.revealedDice.ai.map((die: number, idx: number) => (
+                            <div key={idx} className="w-12 h-12 bg-red-100 border border-red-300 rounded flex items-center justify-center">
+                              <span className="font-bold text-red-600">{die}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    {state.roundResult && (
+                      <div className={`mt-4 p-3 rounded-lg ${state.roundResult.winner === 'human' ? 'bg-green-100 border border-green-400' : 'bg-red-100 border border-red-400'}`}>
+                        <p className={`text-xs font-bold ${state.roundResult.winner === 'human' ? 'text-green-700' : 'text-red-700'}`}>
+                          {state.roundResult.winner === 'human' ? '✅' : '❌'} {state.roundResult.reason}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
             <div className="mb-8">
               <div className="flex justify-between items-center mb-3">
@@ -162,8 +279,9 @@ export default function GameRoom() {
               pendingResult ? (
                 <div className="p-8 bg-blue-50 rounded-2xl border border-blue-100 animate-pulse">
                   <p className="text-xs font-bold text-blue-600 mb-2 uppercase tracking-widest">Agent Proposal</p>
-                  <p className="font-bold text-xl text-blue-900 mb-4">{pendingResult.trace.modelOutput?.type}</p>
-                  <p className="text-sm text-blue-700/70 italic mb-6">"{pendingResult.trace.modelOutput?.explanation}"</p>
+                  {/* Safety net: added optional chaining '?.' to handle undefined traces */}
+                  <p className="font-bold text-xl text-blue-900 mb-4">{pendingResult.trace?.modelOutput?.type || 'UNKNOWN_ACTION'}</p>
+                  <p className="text-sm text-blue-700/70 italic mb-6">"{pendingResult.trace?.modelOutput?.explanation || 'Agent failed to provide reasoning.'}"</p>
                   <div className="flex gap-4">
                     <button onClick={handleApprove} className="flex-1 bg-blue-500 text-white font-bold py-4 rounded-xl hover:bg-blue-600 shadow-lg shadow-blue-100 transition-all uppercase tracking-widest text-xs">Execute Action</button>
                     <button onClick={() => setPendingResult(null)} className="flex-1 bg-white text-gray-400 font-bold py-4 rounded-xl border border-gray-200 uppercase tracking-widest text-xs">Decline</button>
@@ -188,7 +306,6 @@ export default function GameRoom() {
             )}
           </div>
 
-          {/* Decision Logs */}
           <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
             <h2 className="text-xs font-bold text-gray-400 uppercase tracking-[0.3em] mb-6 text-center">Agent Reasoning Trace</h2>
             <div className="space-y-4 max-h-64 overflow-y-auto pr-2">
