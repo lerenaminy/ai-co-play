@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import { getAiDecision } from '../../../src/agent/gemini';
 import { applyRound } from '../../../src/game/engine';
-import { GameState, ActionType, AutonomyLevel, TraceRecord } from '../../../src/types';
+import { GameState, ActionType, AutonomyLevel, TraceRecord, ActionPayload } from '../../../src/types';
 
 export async function POST(req: Request) {
   try {
@@ -15,14 +15,20 @@ export async function POST(req: Request) {
     };
 
     let aiAction: ActionType = 'SHARE';
-    let aiDecision = { type: 'SHARE', explanation: 'Observer Mode: No AI inference. Defaulting to SHARE.', confidence: 1 };
+    
+    // explicitly define type as ActionPayload
+    let aiDecision: ActionPayload = { 
+      type: 'SHARE', 
+      explanation: 'Observer Mode: No AI inference. Defaulting to SHARE.', 
+      confidence: 1 
+    };
 
-    // 如果 Autonomy 為 0，直接跳過大模型呼叫 (省時間與 Token)
+    // skip LLM call if autonomy is 0
     if (autonomy > 0) {
       if (!apiKey) return NextResponse.json({ error: 'API Key is required' }, { status: 401 });
       const decision = await getAiDecision(state, autonomy, apiKey);
-      aiDecision = decision as any;
-      aiAction = decision.type as ActionType;
+      aiDecision = decision;
+      aiAction = decision.type;
     }
 
     const newState = applyRound(state, humanAction, aiAction);
